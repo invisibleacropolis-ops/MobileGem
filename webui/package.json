@@ -1,0 +1,20 @@
+{
+  "name": "mobilegem-webui",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "@mariozechner/mini-lit": "^0.2.0",
+    "@mariozechner/pi-agent-core": "^0.73.1",
+    "@mariozechner/pi-web-ui": "^0.73.1",
+    "lit": "^3.3.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4",
+    "vite": "^5.4.0"
+  }
+}
