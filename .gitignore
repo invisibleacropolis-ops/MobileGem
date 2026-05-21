@@ -1,0 +1,9 @@
+.gradle/
+build/
+app/build/
+node_modules/
+webui/dist/
+app/src/main/assets/webui/
+local.properties
+.idea/
+*.iml
