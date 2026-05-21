@@ -29,6 +29,7 @@ fun ChatScreen(modifier: Modifier = Modifier) {
                 WebView(context).apply {
                     settings.javaScriptEnabled = true
                     settings.domStorageEnabled = true
+                    settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
                     webViewClient = object : WebViewClient() {
                         override fun shouldInterceptRequest(
                             view: WebView,

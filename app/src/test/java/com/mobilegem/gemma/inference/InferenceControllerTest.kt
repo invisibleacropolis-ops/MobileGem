@@ -1,6 +1,7 @@
 package com.mobilegem.gemma.inference
 
 import com.google.common.truth.Truth.assertThat
+import com.mobilegem.gemma.server.LocalLlmServer
 import com.mobilegem.gemma.settings.InferenceBackend
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -11,6 +12,7 @@ class InferenceControllerTest {
     @Test
     fun loadModelStartsServerAndExposesState() = runTest {
         val controller = InferenceController(
+            server = LocalLlmServer(port = 0),
             generatorFactory = { _, _ -> FakeTextGenerator(listOf("hi")) },
         )
         assertThat(controller.state.first().loadedModelName).isNull()
@@ -26,6 +28,7 @@ class InferenceControllerTest {
     @Test
     fun unloadStopsServer() = runTest {
         val controller = InferenceController(
+            server = LocalLlmServer(port = 0),
             generatorFactory = { _, _ -> FakeTextGenerator(listOf("hi")) },
         )
         controller.loadModel("/data/models/m.litertlm", InferenceBackend.CPU)
