@@ -7,13 +7,15 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 
 @Database(
-    entities = [Project::class, Session::class, StoredMessage::class],
+    entities = [Project::class, Session::class, StoredMessage::class, Skill::class, MemoryEntry::class],
     version = 1,
     exportSchema = false,
 )
 @TypeConverters(Converters::class)
 abstract class MemoryDatabase : RoomDatabase() {
     abstract fun coreDao(): CoreDao
+    abstract fun skillDao(): SkillDao
+    abstract fun memoryDao(): MemoryDao
 
     companion object {
         fun create(context: Context): MemoryDatabase =
