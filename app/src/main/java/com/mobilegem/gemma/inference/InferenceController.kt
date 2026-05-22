@@ -1,6 +1,9 @@
 package com.mobilegem.gemma.inference
 
+import com.mobilegem.gemma.memory.ActiveSessionHolder
+import com.mobilegem.gemma.memory.ConversationPersister
 import com.mobilegem.gemma.server.ChatCompletionHandler
+import com.mobilegem.gemma.server.ContextAugmenter
 import com.mobilegem.gemma.server.LocalLlmServer
 import com.mobilegem.gemma.settings.InferenceBackend
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,11 +21,17 @@ class InferenceController(
     val server: LocalLlmServer = LocalLlmServer(),
     private val generatorFactory: (modelPath: String, backend: InferenceBackend) -> TextGenerator =
         { path, backend -> LiteRtLmTextGenerator.create(path, backend) },
+    private val activeSession: ActiveSessionHolder? = null,
+    private val augmenter: ContextAugmenter? = null,
+    private val persister: ConversationPersister? = null,
 ) {
     private val _state = MutableStateFlow(InferenceState())
     val state: StateFlow<InferenceState> = _state.asStateFlow()
 
     private var current: TextGenerator? = null
+
+    /** The currently-loaded generator, or null if no model is loaded. */
+    fun currentGenerator(): TextGenerator? = current
 
     @Synchronized
     fun loadModel(modelPath: String, backend: InferenceBackend) {
@@ -30,7 +39,13 @@ class InferenceController(
         val name = File(modelPath).name
         val generator = generatorFactory(modelPath, backend)
         current = generator
-        server.start(ChatCompletionHandler(generator), modelId = name)
+        val handler = ChatCompletionHandler(
+            generator = generator,
+            augmenter = augmenter,
+            persister = persister,
+            activeSession = activeSession,
+        )
+        server.start(handler, modelId = name)
         _state.value = InferenceState(loadedModelName = name, serverRunning = true)
     }
 
