@@ -52,6 +52,9 @@ dependencies {
     // LiteRT-LM on-device inference
     implementation("com.google.ai.edge.litertlm:litertlm-android:0.12.0")
 
+    // MediaPipe text embedder for on-device embeddings
+    implementation("com.google.mediapipe:tasks-text:0.10.35")
+
     // Embedded HTTP server
     implementation("io.ktor:ktor-server-core:2.3.12")
     implementation("io.ktor:ktor-server-cio:2.3.12")
