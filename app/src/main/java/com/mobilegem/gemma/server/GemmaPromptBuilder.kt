@@ -4,7 +4,10 @@ object GemmaPromptBuilder {
 
     fun build(messages: List<ChatMessage>): String {
         val sb = StringBuilder()
-        val systemText = messages.firstOrNull { it.role == "system" }?.content
+        val systemText = messages
+            .filter { it.role == "system" }
+            .joinToString("\n\n") { it.content }
+            .ifBlank { null }
         var systemConsumed = false
 
         for (msg in messages.filter { it.role != "system" }) {

@@ -35,4 +35,20 @@ class GemmaPromptBuilderTest {
                 "<start_of_turn>model\n"
         )
     }
+
+    @Test
+    fun concatenatesAllSystemMessagesIntoFirstUserTurn() {
+        val prompt = GemmaPromptBuilder.build(
+            listOf(
+                ChatMessage("system", "Skill: be terse."),
+                ChatMessage("system", "Memory: user likes Kotlin."),
+                ChatMessage("user", "Hi"),
+            )
+        )
+        assertThat(prompt).isEqualTo(
+            "<start_of_turn>user\n" +
+                "Skill: be terse.\n\nMemory: user likes Kotlin.\n\nHi<end_of_turn>\n" +
+                "<start_of_turn>model\n"
+        )
+    }
 }
