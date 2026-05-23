@@ -19,8 +19,10 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.mobilegem.gemma.memory.ActiveSessionHolder
 import com.mobilegem.gemma.ui.chat.ChatScreen
 import com.mobilegem.gemma.ui.memory.MemoryScreen
+import com.mobilegem.gemma.ui.memory.MemoryViewModel
 import com.mobilegem.gemma.ui.settings.SettingsScreen
 import com.mobilegem.gemma.ui.settings.SettingsViewModel
 
@@ -33,7 +35,11 @@ private val destinations = listOf(
 )
 
 @Composable
-fun AppScaffold(settingsViewModel: SettingsViewModel) {
+fun AppScaffold(
+    settingsViewModel: SettingsViewModel,
+    memoryViewModel: MemoryViewModel,
+    activeSessionHolder: ActiveSessionHolder,
+) {
     val navController = rememberNavController()
     val backStack by navController.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
@@ -65,8 +71,15 @@ fun AppScaffold(settingsViewModel: SettingsViewModel) {
             startDestination = "chat",
             modifier = Modifier.padding(padding),
         ) {
-            composable("chat") { ChatScreen() }
-            composable("memory") { MemoryScreen() }
+            composable("chat") { ChatScreen(activeSessionHolder = activeSessionHolder) }
+            composable("memory") {
+                MemoryScreen(
+                    viewModel = memoryViewModel,
+                    onOpenChat = {
+                        navController.navigate("chat") { launchSingleTop = true }
+                    },
+                )
+            }
             composable("settings") { SettingsScreen(settingsViewModel) }
         }
     }
