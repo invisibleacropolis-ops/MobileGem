@@ -16,12 +16,12 @@ import com.mobilegem.gemma.memory.SkillRepository
 import com.mobilegem.gemma.memory.db.MemoryDatabase
 import com.mobilegem.gemma.model.ModelFileManager
 import com.mobilegem.gemma.server.MemoryContextAugmenter
+import com.mobilegem.gemma.settings.AppSettings
 import com.mobilegem.gemma.settings.SettingsRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.launch
 import java.io.File
 
 /** Manual service locator; built once in [GemmaApp.onCreate]. */
@@ -30,17 +30,28 @@ class AppContainer(context: Context) {
     val settingsRepository = SettingsRepository(context)
     val modelFileManager = ModelFileManager(File(context.filesDir, "models"))
 
-    /** Long-lived scope for background infrastructure (logger writer, etc.). */
+    /** Long-lived scope for background infrastructure (logger writer, settings collector). */
     val backgroundScope: CoroutineScope =
         CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    /** Logger — file output is gated by the persisted loggingEnabled setting. */
+    /**
+     * Cached flag for whether file-logging is enabled. Updated reactively by a
+     * collector on [settingsRepository.settings]. The logger reads this atomically
+     * on every event — no Flow read, no DataStore I/O on the log hot path.
+     */
+    private val loggingEnabledFlag: java.util.concurrent.atomic.AtomicBoolean =
+        java.util.concurrent.atomic.AtomicBoolean(AppSettings.DEFAULT.loggingEnabled)
+
+    init {
+        backgroundScope.launch {
+            settingsRepository.settings.collect { loggingEnabledFlag.set(it.loggingEnabled) }
+        }
+    }
+
+    /** Logger — file output is gated by the cached [loggingEnabledFlag]. */
     val fileLogger: FileLogger = FileLogger(
         logsDir = File(context.filesDir, "logs"),
-        enabledProvider = {
-            runCatching { runBlocking { settingsRepository.settings.first().loggingEnabled } }
-                .getOrDefault(true)
-        },
+        enabledProvider = { loggingEnabledFlag.get() },
         scope = backgroundScope,
     )
 

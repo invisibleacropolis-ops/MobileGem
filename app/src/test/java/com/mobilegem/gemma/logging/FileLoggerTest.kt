@@ -27,13 +27,9 @@ class FileLoggerTest {
             enabledProvider = { true },
             scope = scope,
         )
-        logger.log(LogLevel.INFO, "test", "hello world",
-            mapOf("k" to "v"), null)
-        // Give the writer coroutine time to drain.
-        Thread.sleep(400)
+        logger.log(LogLevel.INFO, "test", "hello world", mapOf("k" to "v"), null)
+        // close() is synchronous and drains pending entries before returning.
         logger.close()
-        // Wait for the writer coroutine to finish flushing + closing the file.
-        Thread.sleep(400)
         scope.cancel()
 
         val text = logger.currentFile.readText()
@@ -50,14 +46,30 @@ class FileLoggerTest {
             enabledProvider = { false },
             scope = scope,
         )
-        logger.log(LogLevel.INFO, "test", "should-not-appear",
-            emptyMap(), null)
-        Thread.sleep(400)
+        logger.log(LogLevel.INFO, "test", "should-not-appear", emptyMap(), null)
         logger.close()
-        Thread.sleep(400)
         scope.cancel()
 
         val text = logger.currentFile.readText()
         assertThat(text).doesNotContain("should-not-appear")
+    }
+
+    @Test
+    fun closeIsIdempotent() {
+        val scope = newScope()
+        val logger = FileLogger(
+            logsDir = tmp.newFolder("logs"),
+            enabledProvider = { true },
+            scope = scope,
+        )
+        logger.log(LogLevel.INFO, "test", "first", emptyMap(), null)
+        logger.close()
+        logger.close()   // must not throw
+        logger.log(LogLevel.INFO, "test", "after-close", emptyMap(), null) // dropped, must not throw
+        scope.cancel()
+
+        val text = logger.currentFile.readText()
+        assertThat(text).contains("\"msg\":\"first\"")
+        assertThat(text).doesNotContain("after-close")
     }
 }

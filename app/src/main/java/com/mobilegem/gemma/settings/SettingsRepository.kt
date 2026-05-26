@@ -1,6 +1,8 @@
 package com.mobilegem.gemma.settings
 
 import android.content.Context
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
@@ -9,9 +11,12 @@ import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
-private val Context.dataStore by preferencesDataStore(name = "app_settings")
+private val Context.appSettingsDataStore: DataStore<Preferences> by
+    preferencesDataStore(name = "app_settings")
 
-class SettingsRepository(private val context: Context) {
+class SettingsRepository(private val dataStore: DataStore<Preferences>) {
+
+    constructor(context: Context) : this(context.appSettingsDataStore)
 
     private object Keys {
         val activeModel = stringPreferencesKey("active_model")
@@ -20,7 +25,7 @@ class SettingsRepository(private val context: Context) {
         val loggingEnabled = booleanPreferencesKey("logging_enabled")
     }
 
-    val settings: Flow<AppSettings> = context.dataStore.data.map { prefs ->
+    val settings: Flow<AppSettings> = dataStore.data.map { prefs ->
         AppSettings(
             activeModelFileName = prefs[Keys.activeModel],
             backend = prefs[Keys.backend]
@@ -32,14 +37,14 @@ class SettingsRepository(private val context: Context) {
     }
 
     suspend fun setActiveModel(fileName: String) =
-        context.dataStore.edit { it[Keys.activeModel] = fileName }
+        dataStore.edit { it[Keys.activeModel] = fileName }
 
     suspend fun setBackend(backend: InferenceBackend) =
-        context.dataStore.edit { it[Keys.backend] = backend.name }
+        dataStore.edit { it[Keys.backend] = backend.name }
 
     suspend fun setTemperature(value: Float) =
-        context.dataStore.edit { it[Keys.temperature] = value }
+        dataStore.edit { it[Keys.temperature] = value }
 
     suspend fun setLoggingEnabled(value: Boolean) =
-        context.dataStore.edit { it[Keys.loggingEnabled] = value }
+        dataStore.edit { it[Keys.loggingEnabled] = value }
 }

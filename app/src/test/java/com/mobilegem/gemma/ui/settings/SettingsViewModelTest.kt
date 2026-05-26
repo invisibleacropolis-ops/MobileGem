@@ -8,7 +8,9 @@ import com.mobilegem.gemma.model.ContentSource
 import com.mobilegem.gemma.model.ModelFileManager
 import com.mobilegem.gemma.server.LocalLlmServer
 import com.mobilegem.gemma.settings.SettingsRepository
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -40,14 +42,22 @@ class SettingsViewModelTest {
         override fun openStream(): InputStream = ByteArrayInputStream(byteArrayOf(1))
     }
 
-    private fun newViewModel(): SettingsViewModel = SettingsViewModel(
-        settingsRepository = SettingsRepository(ApplicationProvider.getApplicationContext()),
-        modelFileManager = ModelFileManager(tmp.newFolder("models")),
-        inferenceController = InferenceController(
-            server = LocalLlmServer(port = 0),
-            generatorFactory = { _, _ -> FakeTextGenerator(listOf("x")) },
-        ),
-    )
+    private fun newViewModel(): SettingsViewModel {
+        val storeFile = java.io.File(tmp.newFolder("ds"), "settings.preferences_pb")
+        val storeScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        val dataStore = androidx.datastore.preferences.core.PreferenceDataStoreFactory.create(
+            scope = storeScope,
+            produceFile = { storeFile },
+        )
+        return SettingsViewModel(
+            settingsRepository = SettingsRepository(dataStore),
+            modelFileManager = ModelFileManager(tmp.newFolder("models")),
+            inferenceController = InferenceController(
+                server = LocalLlmServer(port = 0),
+                generatorFactory = { _, _ -> FakeTextGenerator(listOf("x")) },
+            ),
+        )
+    }
 
     @Test
     fun importingAModelAddsItToTheInstalledList() = runTest(testDispatcher) {

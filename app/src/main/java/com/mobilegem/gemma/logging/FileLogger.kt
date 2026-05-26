@@ -3,10 +3,13 @@ package com.mobilegem.gemma.logging
 import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.BufferedWriter
 import java.io.File
 import java.io.PrintWriter
@@ -19,13 +22,19 @@ import java.util.TimeZone
 /**
  * Writes structured log events as JSON lines to a per-launch file under [logsDir].
  *
- * - Each [log] call is non-blocking (events go through an unbounded [Channel]).
- * - A single background coroutine drains the channel and writes lines.
- * - The writer flushes every [flushIntervalMs] ms and on [flush]/[close].
- * - When [enabledProvider] returns false, events are dropped (mirroring to
- *   logcat still happens — that costs nothing and helps device-side debugging).
- *
- * The current log file's path is exposed via [currentFile] for sharing/UX.
+ * Design invariants:
+ * - [log] never blocks the caller. Events go through an unbounded [Channel].
+ * - A single background coroutine drains the channel and writes lines, then closes
+ *   the underlying writer when the channel is closed. The periodic flush coroutine
+ *   exits as soon as [closed] flips true.
+ * - [close] is synchronous and idempotent. It signals shutdown, closes the channel,
+ *   and waits up to [drainTimeoutMs] for the writer coroutine to flush and close
+ *   the file. Subsequent calls are no-ops.
+ * - [enabledProvider] is called for every event. It MUST be a cheap, non-blocking
+ *   read (e.g. an [java.util.concurrent.atomic.AtomicBoolean.get]). Do NOT pass a
+ *   suspending or Flow-reading lambda — that defeats the non-blocking guarantee.
+ * - Logcat mirroring runs unconditionally so device-side debugging works even when
+ *   file logging is disabled.
  */
 class FileLogger(
     logsDir: File,
@@ -33,6 +42,7 @@ class FileLogger(
     scope: CoroutineScope,
     private val clock: () -> Long = { System.currentTimeMillis() },
     private val flushIntervalMs: Long = 1500L,
+    private val drainTimeoutMs: Long = 2000L,
 ) : AppLogger {
 
     val currentFile: File
@@ -46,26 +56,38 @@ class FileLogger(
     @Volatile private var writer: BufferedWriter? = null
     @Volatile private var closed = false
 
+    private val writerJob: Job
+    private val flusherJob: Job
+
     init {
         logsDir.mkdirs()
         currentFile = File(logsDir, "mobilegem-${fileNameFormat.format(Date(clock()))}.jsonl")
-        scope.launch(Dispatchers.IO) { runWriter() }
-        scope.launch(Dispatchers.IO) {
+        writerJob = scope.launch(Dispatchers.IO) { runWriter() }
+        flusherJob = scope.launch(Dispatchers.IO) {
             while (isActive && !closed) {
                 delay(flushIntervalMs)
+                if (closed) break
                 runCatching { writer?.flush() }
             }
         }
     }
 
     override fun log(
-        level: LogLevel, category: String, message: String,
-        data: Map<String, Any?>, throwable: Throwable?,
+        level: LogLevel,
+        category: String,
+        message: String,
+        data: Map<String, Any?>,
+        throwable: Throwable?,
     ) {
-        // Always mirror to logcat regardless of file-logging toggle.
+        // Always mirror to logcat (cheap; unaffected by file-logging toggle).
         val tag = "MobileGem"
-        val full = if (data.isEmpty()) "[$category] $message"
-        else "[$category] $message ${data.entries.joinToString(prefix = "{", postfix = "}") { "${it.key}=${it.value}" }}"
+        val full = if (data.isEmpty()) {
+            "[$category] $message"
+        } else {
+            data.entries.joinToString(prefix = "[$category] $message {", postfix = "}") {
+                "${it.key}=${it.value}"
+            }
+        }
         when (level) {
             LogLevel.DEBUG -> Log.d(tag, full, throwable)
             LogLevel.INFO -> Log.i(tag, full, throwable)
@@ -75,6 +97,7 @@ class FileLogger(
 
         if (!enabledProvider()) return
         if (closed) return
+        // trySend on an unbounded channel never blocks and only fails after close().
         channel.trySend(Entry(clock(), level, category, message, data, throwable))
     }
 
@@ -82,52 +105,70 @@ class FileLogger(
         runCatching { writer?.flush() }
     }
 
+    /**
+     * Idempotent synchronous shutdown. Closes the channel, waits for the writer
+     * coroutine to drain pending entries and close the file (bounded by
+     * [drainTimeoutMs]), and cancels the periodic flusher. Safe to call from any
+     * thread (including the main thread on app lifecycle hooks — bounded by the
+     * timeout).
+     */
     override fun close() {
+        if (closed) return
         closed = true
-        // Closing the channel makes the writer coroutine exit its for-loop;
-        // the coroutine itself flushes and closes the underlying writer.
         channel.close()
+        // Block the caller briefly so the file is durable when close() returns.
+        runBlocking {
+            withTimeoutOrNull(drainTimeoutMs) { writerJob.join() }
+        }
+        flusherJob.cancel()
     }
 
     private suspend fun runWriter() {
-        val w = currentFile.bufferedWriter(Charsets.UTF_8).also { writer = it }
-        // Header line for context.
-        w.write(buildJson {
-            put("t", isoFormat.format(Date(clock())))
-            put("level", LogLevel.INFO.name)
-            put("cat", "log")
-            put("msg", "log file opened")
-            put("data") {
-                put("path", currentFile.absolutePath)
-                put("androidVersion", android.os.Build.VERSION.RELEASE)
-                put("sdkInt", android.os.Build.VERSION.SDK_INT)
-                put("device", "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
-            }
-        })
-        w.newLine()
-        w.flush()
-        for (entry in channel) {
-            val line = buildJson {
-                put("t", isoFormat.format(Date(entry.timestamp)))
-                put("level", entry.level.name)
-                put("cat", entry.category)
-                put("msg", entry.message)
-                if (entry.data.isNotEmpty()) {
-                    put("data") { entry.data.forEach { (k, v) -> put(k, v?.toString()) } }
-                }
-                entry.throwable?.let {
-                    put("err") {
-                        put("type", it.javaClass.name)
-                        put("msg", it.message ?: "")
-                        put("stack", stackTraceString(it))
+        val w = currentFile.bufferedWriter(Charsets.UTF_8)
+        writer = w
+        try {
+            // Header line with device/build context.
+            w.write(
+                buildJson {
+                    put("t", isoFormat.format(Date(clock())))
+                    put("level", LogLevel.INFO.name)
+                    put("cat", "log")
+                    put("msg", "log file opened")
+                    put("data") {
+                        put("path", currentFile.absolutePath)
+                        put("androidVersion", android.os.Build.VERSION.RELEASE)
+                        put("sdkInt", android.os.Build.VERSION.SDK_INT)
+                        put("device", "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
+                    }
+                },
+            )
+            w.newLine()
+            w.flush()
+            for (entry in channel) {
+                val line = buildJson {
+                    put("t", isoFormat.format(Date(entry.timestamp)))
+                    put("level", entry.level.name)
+                    put("cat", entry.category)
+                    put("msg", entry.message)
+                    if (entry.data.isNotEmpty()) {
+                        put("data") { entry.data.forEach { (k, v) -> put(k, v?.toString()) } }
+                    }
+                    entry.throwable?.let {
+                        put("err") {
+                            put("type", it.javaClass.name)
+                            put("msg", it.message ?: "")
+                            put("stack", stackTraceString(it))
+                        }
                     }
                 }
+                w.write(line)
+                w.newLine()
             }
-            w.write(line)
-            w.newLine()
+        } finally {
+            runCatching { w.flush() }
+            runCatching { w.close() }
+            writer = null
         }
-        runCatching { w.flush() }
-        runCatching { w.close() }
     }
 
     private fun stackTraceString(t: Throwable): String {
@@ -150,7 +191,8 @@ class FileLogger(
         private val sb = StringBuilder("{")
         private var first = true
         fun put(key: String, value: String?) {
-            sep(); sb.append(quote(key)).append(':').append(if (value == null) "null" else quote(value))
+            sep(); sb.append(quote(key)).append(':')
+                .append(if (value == null) "null" else quote(value))
         }
         fun put(key: String, value: Int) {
             sep(); sb.append(quote(key)).append(':').append(value)
