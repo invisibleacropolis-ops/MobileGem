@@ -1,10 +1,39 @@
+# Android
 .gradle/
-.kotlin/
 build/
 app/build/
-node_modules/
-webui/dist/
-app/src/main/assets/webui/
 local.properties
 .idea/
 *.iml
+*.iws
+.DS_Store
+captures/
+.externalNativeBuild
+.cxx
+executionVideo.mp4
+
+# Kotlin
+.kotlin/
+*.kotlin_module
+
+# Node / WebUI
+node_modules/
+webui/dist/
+app/src/main/assets/webui/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.eslintcache
+
+# Secrets
+.env
+*.keystore
+!debug.keystore
+google-services.json
+
+# User-specific
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/shelf/
+.idea/dictionaries
+.idea/libraries/
