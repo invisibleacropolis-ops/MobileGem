@@ -1,5 +1,6 @@
 package com.mobilegem.gemma.server
 
+import com.mobilegem.gemma.logging.AppLog
 import com.mobilegem.gemma.memory.MemoryRetriever
 import com.mobilegem.gemma.memory.SkillRepository
 
@@ -24,7 +25,14 @@ class MemoryContextAugmenter(
         } else {
             retriever.retrieve(projectId, latestUserMessage, topK)
         }
-        if (skills.isEmpty() && memories.isEmpty()) return null
+        if (skills.isEmpty() && memories.isEmpty()) {
+            AppLog.event(
+                "augmenter", "augmenter.build",
+                "projectId" to projectId, "skills" to 0,
+                "memories" to 0, "chars" to 0,
+            )
+            return null
+        }
 
         val sb = StringBuilder()
         if (skills.isNotEmpty()) {
@@ -39,6 +47,14 @@ class MemoryContextAugmenter(
             sb.append("Relevant long-term memory:\n")
             memories.forEach { sb.append("- ").append(it.content).append('\n') }
         }
-        return sb.toString().trimEnd()
+        val result = sb.toString().trimEnd()
+        AppLog.event(
+            "augmenter", "augmenter.build",
+            "projectId" to projectId,
+            "skills" to skills.size,
+            "memories" to memories.size,
+            "chars" to result.length,
+        )
+        return result
     }
 }

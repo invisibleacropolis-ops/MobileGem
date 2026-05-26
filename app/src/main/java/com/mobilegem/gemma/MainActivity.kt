@@ -7,6 +7,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelProvider.Factory
+import com.mobilegem.gemma.logging.AppLog
 import com.mobilegem.gemma.ui.memory.MemoryViewModel
 import com.mobilegem.gemma.ui.navigation.AppScaffold
 import com.mobilegem.gemma.ui.settings.SettingsViewModel
@@ -14,6 +15,7 @@ import com.mobilegem.gemma.ui.settings.SettingsViewModel
 class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        AppLog.event("activity", "onCreate")
         super.onCreate(savedInstanceState)
         val container = (application as GemmaApp).container
 
@@ -24,6 +26,7 @@ class MainActivity : ComponentActivity() {
                     settingsRepository = container.settingsRepository,
                     modelFileManager = container.modelFileManager,
                     inferenceController = container.inferenceController,
+                    logFilePath = { container.fileLogger.currentFile.absolutePath },
                 ) as T
         }
         val settingsViewModel =
@@ -55,5 +58,16 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
+    }
+
+    override fun onResume() {
+        AppLog.event("activity", "onResume")
+        super.onResume()
+    }
+
+    override fun onStop() {
+        AppLog.event("activity", "onStop")
+        AppLog.flush()
+        super.onStop()
     }
 }

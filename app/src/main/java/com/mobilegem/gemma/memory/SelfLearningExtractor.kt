@@ -2,6 +2,7 @@ package com.mobilegem.gemma.memory
 
 import com.mobilegem.gemma.inference.Embedder
 import com.mobilegem.gemma.inference.TextGenerator
+import com.mobilegem.gemma.logging.AppLog
 import com.mobilegem.gemma.memory.db.MemoryEntry
 import com.mobilegem.gemma.server.ChatMessage
 import kotlinx.coroutines.flow.toList
@@ -20,11 +21,19 @@ class SelfLearningExtractor(
     suspend fun extractAndStore(
         projectId: Long, sessionId: Long, transcript: List<ChatMessage>,
     ): List<MemoryEntry> {
+        AppLog.event(
+            "selflearn", "selflearn.begin",
+            "projectId" to projectId,
+            "sessionId" to sessionId,
+            "transcriptTurns" to transcript.size,
+        )
         val prompt = buildExtractionPrompt(transcript)
         val output = generator.generate(prompt, temperature = 0.2f).toList().joinToString("")
+        AppLog.event("selflearn", "selflearn.modelOutput", "outputChars" to output.length)
         val facts = FactListParser.parse(output)
+        AppLog.event("selflearn", "selflearn.parsed", "factCount" to facts.size)
 
-        return facts.map { fact ->
+        val stored = facts.map { fact ->
             val embedding = embedder.embed(fact)
             val id = ltm.store(
                 projectId = projectId,
@@ -37,6 +46,8 @@ class SelfLearningExtractor(
                 embedding = embedding, sourceSessionId = sessionId, createdAt = 0,
             )
         }
+        AppLog.event("selflearn", "selflearn.end", "storedCount" to stored.size)
+        return stored
     }
 
     private fun buildExtractionPrompt(transcript: List<ChatMessage>): String {

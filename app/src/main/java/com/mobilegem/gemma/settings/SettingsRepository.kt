@@ -1,6 +1,7 @@
 package com.mobilegem.gemma.settings
 
 import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -16,6 +17,7 @@ class SettingsRepository(private val context: Context) {
         val activeModel = stringPreferencesKey("active_model")
         val backend = stringPreferencesKey("backend")
         val temperature = floatPreferencesKey("temperature")
+        val loggingEnabled = booleanPreferencesKey("logging_enabled")
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { prefs ->
@@ -25,6 +27,7 @@ class SettingsRepository(private val context: Context) {
                 ?.let { runCatching { InferenceBackend.valueOf(it) }.getOrNull() }
                 ?: AppSettings.DEFAULT.backend,
             temperature = prefs[Keys.temperature] ?: AppSettings.DEFAULT.temperature,
+            loggingEnabled = prefs[Keys.loggingEnabled] ?: AppSettings.DEFAULT.loggingEnabled,
         )
     }
 
@@ -36,4 +39,7 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setTemperature(value: Float) =
         context.dataStore.edit { it[Keys.temperature] = value }
+
+    suspend fun setLoggingEnabled(value: Boolean) =
+        context.dataStore.edit { it[Keys.loggingEnabled] = value }
 }

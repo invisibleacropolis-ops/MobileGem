@@ -1,5 +1,6 @@
 package com.mobilegem.gemma.inference
 
+import com.mobilegem.gemma.logging.AppLog
 import com.mobilegem.gemma.memory.ActiveSessionHolder
 import com.mobilegem.gemma.memory.ConversationPersister
 import com.mobilegem.gemma.server.ChatCompletionHandler
@@ -35,22 +36,40 @@ class InferenceController(
 
     @Synchronized
     fun loadModel(modelPath: String, backend: InferenceBackend) {
-        unload()
-        val name = File(modelPath).name
-        val generator = generatorFactory(modelPath, backend)
-        current = generator
-        val handler = ChatCompletionHandler(
-            generator = generator,
-            augmenter = augmenter,
-            persister = persister,
-            activeSession = activeSession,
+        AppLog.event(
+            "inference", "loadModel.begin",
+            "modelPath" to modelPath, "backend" to backend.name,
         )
-        server.start(handler, modelId = name)
-        _state.value = InferenceState(loadedModelName = name, serverRunning = true)
+        try {
+            unload()
+            val name = File(modelPath).name
+            val generator = generatorFactory(modelPath, backend)
+            current = generator
+            val handler = ChatCompletionHandler(
+                generator = generator,
+                augmenter = augmenter,
+                persister = persister,
+                activeSession = activeSession,
+            )
+            server.start(handler, modelId = name)
+            _state.value = InferenceState(loadedModelName = name, serverRunning = true)
+            AppLog.event(
+                "inference", "loadModel.end",
+                "name" to name, "serverRunning" to true,
+            )
+        } catch (t: Throwable) {
+            AppLog.error(
+                "inference", "loadModel.failed", t,
+                "modelPath" to modelPath, "backend" to backend.name,
+            )
+            throw t
+        }
     }
 
     @Synchronized
     fun unload() {
+        val prior = _state.value.loadedModelName
+        AppLog.event("inference", "unload", "loadedModelName" to prior)
         server.stop()
         (current as? Closeable)?.close()
         current = null

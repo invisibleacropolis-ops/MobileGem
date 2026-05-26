@@ -1,5 +1,6 @@
 package com.mobilegem.gemma.server
 
+import com.mobilegem.gemma.logging.AppLog
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
@@ -46,21 +47,32 @@ fun Application.installLlmRoutes(handler: ChatCompletionHandler, modelId: String
     }
     routing {
         get("/v1/models") {
+            AppLog.event("server", "server.models.list", "modelId" to modelId)
             call.respond(ModelList(data = listOf(ModelInfo(id = modelId))))
         }
         post("/v1/chat/completions") {
-            val request = jsonFormat.decodeFromString(
-                ChatCompletionRequest.serializer(), call.receiveText(),
-            )
-            if (request.stream) {
-                call.respondTextWriter(contentType = ContentType.Text.EventStream) {
-                    handler.streamSse(request).collect { payload ->
-                        write(payload)
-                        flush()
+            try {
+                val request = jsonFormat.decodeFromString(
+                    ChatCompletionRequest.serializer(), call.receiveText(),
+                )
+                AppLog.event(
+                    "server", "server.chat.request",
+                    "stream" to request.stream,
+                    "messageCount" to request.messages.size,
+                )
+                if (request.stream) {
+                    call.respondTextWriter(contentType = ContentType.Text.EventStream) {
+                        handler.streamSse(request).collect { payload ->
+                            write(payload)
+                            flush()
+                        }
                     }
+                } else {
+                    call.respond(HttpStatusCode.OK, handler.complete(request))
                 }
-            } else {
-                call.respond(HttpStatusCode.OK, handler.complete(request))
+            } catch (t: Throwable) {
+                AppLog.error("server", "server.chat.error", t)
+                throw t
             }
         }
     }
@@ -73,12 +85,16 @@ class LocalLlmServer(private val port: Int = 8765) {
 
     fun start(handler: ChatCompletionHandler, modelId: String) {
         stop()
+        AppLog.event("server", "server.start", "port" to port, "modelId" to modelId)
         server = embeddedServer(CIO, port = port, host = "127.0.0.1") {
             installLlmRoutes(handler, modelId)
         }.also { it.start(wait = false) }
     }
 
     fun stop() {
+        if (server != null) {
+            AppLog.event("server", "server.stop")
+        }
         server?.stop(gracePeriodMillis = 200, timeoutMillis = 1000)
         server = null
     }

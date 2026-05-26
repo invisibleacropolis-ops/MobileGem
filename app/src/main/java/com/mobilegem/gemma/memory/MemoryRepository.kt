@@ -1,5 +1,6 @@
 package com.mobilegem.gemma.memory
 
+import com.mobilegem.gemma.logging.AppLog
 import com.mobilegem.gemma.memory.db.CoreDao
 import com.mobilegem.gemma.memory.db.Project
 import com.mobilegem.gemma.memory.db.Session
@@ -21,18 +22,25 @@ class MemoryRepository(
 
     suspend fun createProject(name: String, description: String): Long {
         val now = clock()
-        return coreDao.insertProject(
+        val id = coreDao.insertProject(
             Project(name = name, description = description, createdAt = now, updatedAt = now),
         )
+        AppLog.event("memory", "memory.project.create", "name" to name, "id" to id)
+        return id
     }
 
     suspend fun deleteProject(projectId: Long) = coreDao.deleteProject(projectId)
 
     suspend fun createSession(projectId: Long, title: String): Long {
         val now = clock()
-        return coreDao.insertSession(
+        val id = coreDao.insertSession(
             Session(projectId = projectId, title = title, createdAt = now, updatedAt = now),
         )
+        AppLog.event(
+            "memory", "memory.session.create",
+            "projectId" to projectId, "title" to title, "id" to id,
+        )
+        return id
     }
 
     suspend fun deleteSession(sessionId: Long) = coreDao.deleteSession(sessionId)
@@ -41,6 +49,10 @@ class MemoryRepository(
         coreDao.messagesForSession(sessionId)
 
     override suspend fun persistConversation(sessionId: Long, messages: List<ChatMessage>) {
+        AppLog.event(
+            "memory", "memory.persist",
+            "sessionId" to sessionId, "messageCount" to messages.size,
+        )
         coreDao.deleteMessagesForSession(sessionId)
         val now = clock()
         messages.forEachIndexed { index, msg ->
