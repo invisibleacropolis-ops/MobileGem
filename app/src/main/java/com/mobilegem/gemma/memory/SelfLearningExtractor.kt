@@ -24,14 +24,49 @@ class SelfLearningExtractor(
     suspend fun extractAndStore(
         projectId: Long, sessionId: Long, transcript: List<ChatMessage>,
     ): List<MemoryEntry> {
-        val prompt = buildExtractionPrompt(transcript)
+        AppLog.event(
+            category = "selflearn",
+            message = "begin",
+            "projectId" to projectId,
+            "sessionId" to sessionId,
+            "transcriptTurns" to transcript.size,
+            "maxAttempts" to temperatures.size,
+        )
 
+        val prompt = buildExtractionPrompt(transcript)
         var lastOutput = ""
         var facts: List<String> = emptyList()
-        for (temperature in temperatures) {
+        var attemptsUsed = 0
+
+        for ((index, temperature) in temperatures.withIndex()) {
+            attemptsUsed = index + 1
+            AppLog.event(
+                category = "selflearn",
+                message = "attempt",
+                "projectId" to projectId,
+                "sessionId" to sessionId,
+                "attempt" to attemptsUsed,
+                "temperature" to temperature,
+            )
             val output = generator.generate(prompt, temperature).toList().joinToString("")
             lastOutput = output
+            AppLog.event(
+                category = "selflearn",
+                message = "modelOutput",
+                "projectId" to projectId,
+                "sessionId" to sessionId,
+                "attempt" to attemptsUsed,
+                "outputChars" to output.length,
+            )
             facts = FactListParser.parse(output)
+            AppLog.event(
+                category = "selflearn",
+                message = "parsed",
+                "projectId" to projectId,
+                "sessionId" to sessionId,
+                "attempt" to attemptsUsed,
+                "factCount" to facts.size,
+            )
             if (facts.isNotEmpty()) break
         }
 
@@ -41,12 +76,12 @@ class SelfLearningExtractor(
                 message = "parseEmpty",
                 "projectId" to projectId,
                 "sessionId" to sessionId,
-                "attempts" to temperatures.size,
+                "attempts" to attemptsUsed,
                 "rawOutput" to lastOutput.take(2000),
             )
         }
 
-        return facts.map { fact ->
+        val stored = facts.map { fact ->
             val embedding = embedder.embed(fact)
             val id = ltm.store(
                 projectId = projectId,
@@ -59,6 +94,16 @@ class SelfLearningExtractor(
                 embedding = embedding, sourceSessionId = sessionId, createdAt = 0,
             )
         }
+
+        AppLog.event(
+            category = "selflearn",
+            message = "end",
+            "projectId" to projectId,
+            "sessionId" to sessionId,
+            "attemptsUsed" to attemptsUsed,
+            "storedCount" to stored.size,
+        )
+        return stored
     }
 
     private fun buildExtractionPrompt(transcript: List<ChatMessage>): String {
