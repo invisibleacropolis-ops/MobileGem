@@ -26,4 +26,40 @@ class FactListParserTest {
         assertThat(FactListParser.parse("""["real fact", "  ", ""]"""))
             .containsExactly("real fact")
     }
+
+    @Test
+    fun fallsBackToBulletedLines() {
+        val raw = """
+            Here are the facts:
+            - User prefers metric units
+            - User is building an Android app
+            * Bullets with asterisks also work
+        """.trimIndent()
+        assertThat(FactListParser.parse(raw))
+            .containsExactly(
+                "User prefers metric units",
+                "User is building an Android app",
+                "Bullets with asterisks also work",
+            )
+    }
+
+    @Test
+    fun fallsBackToNumberedLines() {
+        val raw = """
+            1. User likes Kotlin
+            2. User is in Berlin
+        """.trimIndent()
+        assertThat(FactListParser.parse(raw))
+            .containsExactly("User likes Kotlin", "User is in Berlin")
+    }
+
+    @Test
+    fun ignoresNonFactLinesInFallback() {
+        val raw = """
+            Sure! Here are some facts:
+            - User has a cat
+            Hope this helps.
+        """.trimIndent()
+        assertThat(FactListParser.parse(raw)).containsExactly("User has a cat")
+    }
 }
