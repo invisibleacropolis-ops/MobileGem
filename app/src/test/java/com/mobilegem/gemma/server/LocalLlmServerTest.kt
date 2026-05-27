@@ -3,6 +3,7 @@ package com.mobilegem.gemma.server
 import com.google.common.truth.Truth.assertThat
 import com.mobilegem.gemma.inference.FakeTextGenerator
 import io.ktor.client.request.get
+import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
@@ -36,5 +37,24 @@ class LocalLlmServerTest {
         val text = response.bodyAsText()
         assertThat(text).contains("\"content\":\"ok\"")
         assertThat(text).contains("data: [DONE]")
+    }
+
+    @Test
+    fun corsAllowsOnlyTheWebViewOrigin() = testApplication {
+        application {
+            installLlmRoutes(
+                ChatCompletionHandler(FakeTextGenerator(emptyList())),
+                "gemma",
+            )
+        }
+        val allowed = client.get("/v1/models") {
+            header("Origin", "https://appassets.androidplatform.net")
+        }
+        val disallowed = client.get("/v1/models") {
+            header("Origin", "https://evil.example.com")
+        }
+        assertThat(allowed.headers["Access-Control-Allow-Origin"])
+            .isEqualTo("https://appassets.androidplatform.net")
+        assertThat(disallowed.headers["Access-Control-Allow-Origin"]).isNull()
     }
 }

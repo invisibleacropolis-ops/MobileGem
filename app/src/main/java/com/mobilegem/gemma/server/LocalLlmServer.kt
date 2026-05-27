@@ -41,7 +41,7 @@ private data class ModelList(
 fun Application.installLlmRoutes(handler: ChatCompletionHandler, modelId: String) {
     install(ContentNegotiation) { json(jsonFormat) }
     install(CORS) {
-        anyHost()
+        allowHost("appassets.androidplatform.net", schemes = listOf("https"))
         allowHeader("Content-Type")
         allowHeader("Authorization")
     }
