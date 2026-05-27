@@ -48,9 +48,7 @@ fun ChatScreen(
                             ): WebResourceResponse? =
                                 assetLoader.shouldInterceptRequest(request.url)
                         }
-                        loadUrl(
-                            "https://appassets.androidplatform.net/assets/webui/index.html",
-                        )
+                        loadUrl(ChatConfig.WEB_UI_URL)
                     }
                 },
             )
