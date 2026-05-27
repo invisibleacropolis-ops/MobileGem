@@ -25,6 +25,7 @@ class InferenceController(
     private val activeSession: ActiveSessionHolder? = null,
     private val augmenter: ContextAugmenter? = null,
     private val persister: ConversationPersister? = null,
+    private val authToken: String? = null,
 ) {
     private val _state = MutableStateFlow(InferenceState())
     val state: StateFlow<InferenceState> = _state.asStateFlow()
@@ -51,7 +52,7 @@ class InferenceController(
                 persister = persister,
                 activeSession = activeSession,
             )
-            server.start(handler, modelId = name)
+            server.start(handler, modelId = name, expectedToken = authToken)
             _state.value = InferenceState(loadedModelName = name, serverRunning = true)
             AppLog.event(
                 "inference", "loadModel.end",

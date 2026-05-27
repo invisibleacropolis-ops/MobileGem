@@ -8,6 +8,7 @@ import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
@@ -56,5 +57,39 @@ class LocalLlmServerTest {
         assertThat(allowed.headers["Access-Control-Allow-Origin"])
             .isEqualTo("https://appassets.androidplatform.net")
         assertThat(disallowed.headers["Access-Control-Allow-Origin"]).isNull()
+    }
+
+    @Test
+    fun chatCompletionsRejectsRequestsWithoutBearerToken() = testApplication {
+        application {
+            installLlmRoutes(
+                handler = ChatCompletionHandler(FakeTextGenerator(listOf("hi"))),
+                modelId = "gemma",
+                expectedToken = "secret-xyz",
+            )
+        }
+        val response = client.post("/v1/chat/completions") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"model":"gemma","messages":[{"role":"user","content":"hi"}]}""")
+        }
+        assertThat(response.status).isEqualTo(HttpStatusCode.Unauthorized)
+    }
+
+    @Test
+    fun chatCompletionsAcceptsRequestsWithValidBearerToken() = testApplication {
+        application {
+            installLlmRoutes(
+                handler = ChatCompletionHandler(FakeTextGenerator(listOf("hi"))),
+                modelId = "gemma",
+                expectedToken = "secret-xyz",
+            )
+        }
+        val response = client.post("/v1/chat/completions") {
+            contentType(ContentType.Application.Json)
+            header(HttpHeaders.Authorization, "Bearer secret-xyz")
+            setBody("""{"model":"gemma","stream":true,"messages":[{"role":"user","content":"hi"}]}""")
+        }
+        assertThat(response.status).isEqualTo(HttpStatusCode.OK)
+        assertThat(response.bodyAsText()).contains("data: [DONE]")
     }
 }

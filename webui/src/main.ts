@@ -23,6 +23,20 @@ import "@mariozechner/pi-web-ui/app.css";
 // INVARIANT (a): the LLM provider base URL is exactly the local server.
 const LOCAL_BASE_URL = "http://127.0.0.1:8765/v1";
 
+/**
+ * Read the per-launch auth token injected by the Android host via the
+ * `window.MobileGem` JavascriptInterface bridge. Returns an empty string when
+ * the bridge is unavailable (e.g. running outside the WebView during dev).
+ */
+function getAuthToken(): string {
+  try {
+    const w = window as unknown as { MobileGem?: { getAuthToken?: () => string } };
+    return w.MobileGem?.getAuthToken?.() ?? "";
+  } catch {
+    return "";
+  }
+}
+
 // Identifier for our single custom OpenAI-compatible provider.
 const PROVIDER_ID = "mobilegem-local";
 
@@ -35,7 +49,10 @@ const FALLBACK_MODEL_ID = "gemma";
  */
 async function resolveModelId(): Promise<string> {
   try {
-    const response = await fetch(`${LOCAL_BASE_URL}/models`);
+    const token = getAuthToken();
+    const response = await fetch(`${LOCAL_BASE_URL}/models`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
     if (!response.ok) {
       throw new Error(`models request failed: ${response.status}`);
     }
@@ -115,13 +132,11 @@ async function initApp(): Promise<void> {
 
   const storage = await initStorage();
 
-  // The local server needs no real credentials, but AgentInterface refuses to
-  // send a message unless a provider key exists. Seed a placeholder so the
-  // chat works without an API-key prompt.
-  const existingKey = await storage.providerKeys.get(PROVIDER_ID);
-  if (!existingKey) {
-    await storage.providerKeys.set(PROVIDER_ID, "local");
-  }
+  // The local server requires the per-launch auth token (a shared secret with
+  // the Android host). AgentInterface refuses to send a message unless a
+  // provider key exists, so we seed the bridge token here. Overwrite any
+  // stale token from a prior launch.
+  await storage.providerKeys.set(PROVIDER_ID, getAuthToken());
 
   const modelId = await resolveModelId();
   const model = buildLocalModel(modelId);
@@ -135,8 +150,8 @@ async function initApp(): Promise<void> {
       tools: [],
     },
     convertToLlm: defaultConvertToLlm,
-    // Supplies the placeholder key for the local provider on every LLM call.
-    getApiKey: async () => "local",
+    // Supplies the per-launch auth token for the local provider on every LLM call.
+    getApiKey: async () => getAuthToken(),
   });
 
   const chatPanel = new ChatPanel();

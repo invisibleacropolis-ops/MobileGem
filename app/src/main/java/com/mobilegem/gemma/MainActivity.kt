@@ -55,6 +55,7 @@ class MainActivity : ComponentActivity() {
                     settingsViewModel = settingsViewModel,
                     memoryViewModel = memoryViewModel,
                     activeSessionHolder = container.activeSessionHolder,
+                    authToken = container.authToken.value,
                 )
             }
         }

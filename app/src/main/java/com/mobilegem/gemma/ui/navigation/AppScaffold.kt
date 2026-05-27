@@ -39,6 +39,7 @@ fun AppScaffold(
     settingsViewModel: SettingsViewModel,
     memoryViewModel: MemoryViewModel,
     activeSessionHolder: ActiveSessionHolder,
+    authToken: String,
 ) {
     val navController = rememberNavController()
     val backStack by navController.currentBackStackEntryAsState()
@@ -71,7 +72,9 @@ fun AppScaffold(
             startDestination = "chat",
             modifier = Modifier.padding(padding),
         ) {
-            composable("chat") { ChatScreen(activeSessionHolder = activeSessionHolder) }
+            composable("chat") {
+                ChatScreen(activeSessionHolder = activeSessionHolder, authToken = authToken)
+            }
             composable("memory") {
                 MemoryScreen(
                     viewModel = memoryViewModel,

@@ -2,6 +2,7 @@ package com.mobilegem.gemma.server
 
 import com.mobilegem.gemma.logging.AppLog
 import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
@@ -38,7 +39,11 @@ private data class ModelList(
     val data: List<ModelInfo>,
 )
 
-fun Application.installLlmRoutes(handler: ChatCompletionHandler, modelId: String) {
+fun Application.installLlmRoutes(
+    handler: ChatCompletionHandler,
+    modelId: String,
+    expectedToken: String? = null,
+) {
     install(ContentNegotiation) { json(jsonFormat) }
     install(CORS) {
         allowHost("appassets.androidplatform.net", schemes = listOf("https"))
@@ -47,10 +52,18 @@ fun Application.installLlmRoutes(handler: ChatCompletionHandler, modelId: String
     }
     routing {
         get("/v1/models") {
+            if (!checkAuth(expectedToken)) {
+                call.respond(HttpStatusCode.Unauthorized)
+                return@get
+            }
             AppLog.event("server", "server.models.list", "modelId" to modelId)
             call.respond(ModelList(data = listOf(ModelInfo(id = modelId))))
         }
         post("/v1/chat/completions") {
+            if (!checkAuth(expectedToken)) {
+                call.respond(HttpStatusCode.Unauthorized)
+                return@post
+            }
             try {
                 val request = jsonFormat.decodeFromString(
                     ChatCompletionRequest.serializer(), call.receiveText(),
@@ -78,16 +91,25 @@ fun Application.installLlmRoutes(handler: ChatCompletionHandler, modelId: String
     }
 }
 
+private suspend fun io.ktor.util.pipeline.PipelineContext<Unit, io.ktor.server.application.ApplicationCall>.checkAuth(
+    expected: String?,
+): Boolean {
+    if (expected == null) return true
+    val header = call.request.headers[HttpHeaders.Authorization] ?: return false
+    val token = header.removePrefix("Bearer ").trim()
+    return token == expected
+}
+
 /** Owns the running HTTP server. The active model can be swapped by rebuilding. */
 class LocalLlmServer(private val port: Int = 8765) {
 
     private var server: ApplicationEngine? = null
 
-    fun start(handler: ChatCompletionHandler, modelId: String) {
+    fun start(handler: ChatCompletionHandler, modelId: String, expectedToken: String? = null) {
         stop()
         AppLog.event("server", "server.start", "port" to port, "modelId" to modelId)
         server = embeddedServer(CIO, port = port, host = "127.0.0.1") {
-            installLlmRoutes(handler, modelId)
+            installLlmRoutes(handler, modelId, expectedToken)
         }.also { it.start(wait = false) }
     }
 
