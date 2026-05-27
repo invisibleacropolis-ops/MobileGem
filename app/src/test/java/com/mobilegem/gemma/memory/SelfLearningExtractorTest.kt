@@ -95,4 +95,42 @@ class SelfLearningExtractorTest {
             com.mobilegem.gemma.logging.AppLog.uninstall()
         }
     }
+
+    @Test
+    fun retriesOnEmptyParseAndSucceedsOnLaterAttempt() = runTest {
+        val generator = com.mobilegem.gemma.inference.ScriptedTextGenerator(
+            listOf(
+                "I don't have any facts to add.",   // first attempt: empty parse
+                """["User likes Kotlin"]""",         // second attempt: success
+            ),
+        )
+        val embedder = FakeEmbedder(mapOf("User likes Kotlin" to floatArrayOf(1f, 0f)))
+        val extractor = SelfLearningExtractor(generator, embedder, ltm)
+
+        val stored = extractor.extractAndStore(
+            projectId = 2,
+            sessionId = 5,
+            transcript = listOf(ChatMessage("user", "I love Kotlin")),
+        )
+
+        assertThat(stored.map { it.content }).containsExactly("User likes Kotlin")
+        assertThat(generator.calls).hasSize(2)
+        // Temperatures increase across attempts.
+        assertThat(generator.calls[0].second).isLessThan(generator.calls[1].second)
+    }
+
+    @Test
+    fun givesUpAfterMaxAttempts() = runTest {
+        val generator = com.mobilegem.gemma.inference.ScriptedTextGenerator(
+            listOf("nope", "still nope", "really nope"),
+        )
+        val extractor = SelfLearningExtractor(
+            generator, FakeEmbedder(emptyMap()), ltm,
+        )
+        val stored = extractor.extractAndStore(
+            2, 5, listOf(ChatMessage("user", "anything")),
+        )
+        assertThat(stored).isEmpty()
+        assertThat(generator.calls).hasSize(3)
+    }
 }

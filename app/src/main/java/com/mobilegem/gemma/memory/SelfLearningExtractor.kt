@@ -11,39 +11,42 @@ class SelfLearningExtractor(
     private val generator: TextGenerator,
     private val embedder: Embedder,
     private val ltm: LongTermMemoryRepository,
+    /** Temperatures to try in order; length determines the maximum attempt count. */
+    private val temperatures: List<Float> = listOf(0.2f, 0.5f, 0.8f),
 ) {
 
     /**
-     * Extracts durable facts from [transcript] using the on-device model,
-     * embeds and stores each as a memory entry scoped to [projectId].
-     * @return the memory entries that were stored.
+     * Extracts durable facts from [transcript] via the on-device model. Retries
+     * with progressively higher temperature when the parser yields zero facts
+     * AND the model actually produced output (so retries only happen when the
+     * model "tried" but mis-formatted). Returns the [MemoryEntry]s stored.
      */
     suspend fun extractAndStore(
         projectId: Long, sessionId: Long, transcript: List<ChatMessage>,
     ): List<MemoryEntry> {
-        AppLog.event(
-            "selflearn", "selflearn.begin",
-            "projectId" to projectId,
-            "sessionId" to sessionId,
-            "transcriptTurns" to transcript.size,
-        )
         val prompt = buildExtractionPrompt(transcript)
-        val output = generator.generate(prompt, temperature = 0.2f).toList().joinToString("")
-        AppLog.event("selflearn", "selflearn.modelOutput", "outputChars" to output.length)
-        val facts = FactListParser.parse(output)
-        AppLog.event("selflearn", "selflearn.parsed", "factCount" to facts.size)
 
-        if (facts.isEmpty() && output.isNotBlank()) {
+        var lastOutput = ""
+        var facts: List<String> = emptyList()
+        for (temperature in temperatures) {
+            val output = generator.generate(prompt, temperature).toList().joinToString("")
+            lastOutput = output
+            facts = FactListParser.parse(output)
+            if (facts.isNotEmpty()) break
+        }
+
+        if (facts.isEmpty() && lastOutput.isNotBlank()) {
             AppLog.warn(
                 category = "selflearn",
                 message = "parseEmpty",
                 "projectId" to projectId,
                 "sessionId" to sessionId,
-                "rawOutput" to output.take(2000),
+                "attempts" to temperatures.size,
+                "rawOutput" to lastOutput.take(2000),
             )
         }
 
-        val stored = facts.map { fact ->
+        return facts.map { fact ->
             val embedding = embedder.embed(fact)
             val id = ltm.store(
                 projectId = projectId,
@@ -56,8 +59,6 @@ class SelfLearningExtractor(
                 embedding = embedding, sourceSessionId = sessionId, createdAt = 0,
             )
         }
-        AppLog.event("selflearn", "selflearn.end", "storedCount" to stored.size)
-        return stored
     }
 
     private fun buildExtractionPrompt(transcript: List<ChatMessage>): String {
