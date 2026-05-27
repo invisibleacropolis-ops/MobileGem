@@ -68,7 +68,7 @@ private fun ProjectListView(
                 Text("Add")
             }
         }
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(projects) { (id, label) ->
                 Card(Modifier.fillMaxWidth()) {
                     TextButton(onClick = { onSelect(id) }) { Text(label) }
@@ -125,7 +125,7 @@ private fun SessionsTab(
                 Text("Add")
             }
         }
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(state.sessions) { session ->
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(12.dp), Arrangement.spacedBy(4.dp)) {
@@ -169,7 +169,7 @@ private fun SkillsTab(
                 onAddSkill(name, instructions); name = ""; instructions = ""
             }
         }) { Text("Add skill") }
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(state.skills) { skill ->
                 Card(Modifier.fillMaxWidth()) {
                     Row(
