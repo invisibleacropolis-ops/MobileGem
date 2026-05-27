@@ -13,9 +13,14 @@ class ChatCompletionHandler(
     private val augmenter: ContextAugmenter? = null,
     private val persister: ConversationPersister? = null,
     private val activeSession: ActiveSessionHolder? = null,
+    /** Total context window in tokens (model-dependent). Gemma 4 defaults to 8192. */
+    private val contextWindow: Int = 8192,
+    /** Reserved budget for the model's own output. */
+    private val outputBudget: Int = 1024,
 ) {
 
     private val json = Json { encodeDefaults = true }
+    private val maxInputTokens: Int get() = contextWindow - outputBudget
 
     /** Emits SSE payload strings, each already terminated with a blank line. */
     fun streamSse(request: ChatCompletionRequest): Flow<String> = flow {
@@ -27,7 +32,9 @@ class ChatCompletionHandler(
             val id = "chatcmpl-${System.nanoTime()}"
             val created = System.currentTimeMillis() / 1000
             val temp = request.temperature ?: 0.8f
-            val messages = augmentedMessages(request.messages)
+            val messages = MessageBudget.fitWithinBudget(
+                augmentedMessages(request.messages), maxInputTokens,
+            )
             val prompt = GemmaPromptBuilder.build(messages)
 
             emit(sseChunk(id, created, request.model, Delta(role = "assistant"), null))
@@ -53,7 +60,9 @@ class ChatCompletionHandler(
         )
         return try {
             val temp = request.temperature ?: 0.8f
-            val messages = augmentedMessages(request.messages)
+            val messages = MessageBudget.fitWithinBudget(
+                augmentedMessages(request.messages), maxInputTokens,
+            )
             val prompt = GemmaPromptBuilder.build(messages)
             val answer = StringBuilder()
             generator.generate(prompt, temp).collect { answer.append(it) }
