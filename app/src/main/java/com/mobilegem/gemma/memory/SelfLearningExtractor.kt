@@ -33,6 +33,16 @@ class SelfLearningExtractor(
         val facts = FactListParser.parse(output)
         AppLog.event("selflearn", "selflearn.parsed", "factCount" to facts.size)
 
+        if (facts.isEmpty() && output.isNotBlank()) {
+            AppLog.warn(
+                category = "selflearn",
+                message = "parseEmpty",
+                "projectId" to projectId,
+                "sessionId" to sessionId,
+                "rawOutput" to output.take(2000),
+            )
+        }
+
         val stored = facts.map { fact ->
             val embedding = embedder.embed(fact)
             val id = ltm.store(

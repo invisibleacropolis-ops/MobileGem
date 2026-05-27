@@ -73,4 +73,26 @@ class SelfLearningExtractorTest {
         assertThat(stored).isEmpty()
         assertThat(ltm.entriesForProjectScope(2)).isEmpty()
     }
+
+    @Test
+    fun logsRawOutputWhenParseYieldsNothing() = runTest {
+        val capturing = com.mobilegem.gemma.logging.CapturingLogger()
+        com.mobilegem.gemma.logging.AppLog.install(capturing)
+        try {
+            val extractor = SelfLearningExtractor(
+                generator = FakeTextGenerator(tokens = listOf("Sorry, I couldn't think of any facts.")),
+                embedder = FakeEmbedder(emptyMap()),
+                ltm = ltm,
+            )
+            val stored = extractor.extractAndStore(2, 5, listOf(ChatMessage("user", "hi")))
+            assertThat(stored).isEmpty()
+            val warn = capturing.forCategory("selflearn")
+                .firstOrNull { it.message == "parseEmpty" }
+            assertThat(warn).isNotNull()
+            assertThat(warn!!.data["rawOutput"].toString())
+                .contains("Sorry, I couldn't think")
+        } finally {
+            com.mobilegem.gemma.logging.AppLog.uninstall()
+        }
+    }
 }
