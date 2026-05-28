@@ -62,4 +62,15 @@ class FactListParserTest {
         """.trimIndent()
         assertThat(FactListParser.parse(raw)).containsExactly("User has a cat")
     }
+
+    @Test
+    fun explicitEmptyJsonArrayShortCircuitsBulletScan() {
+        // The model explicitly emitted an empty JSON array — that IS the answer.
+        // Must NOT fall through to the bullet scanner; result is empty by design.
+        val raw = """
+            Sure, here are the facts: []
+            - this bullet should NOT be picked up because the JSON parsed successfully
+        """.trimIndent()
+        assertThat(FactListParser.parse(raw)).isEmpty()
+    }
 }

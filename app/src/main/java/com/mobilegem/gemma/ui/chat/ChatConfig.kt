@@ -9,6 +9,9 @@ object ChatConfig {
     /** Origin under which WebViewAssetLoader serves the bundled web app. */
     const val WEB_UI_ORIGIN = "https://appassets.androidplatform.net"
 
+    /** Bare host portion of [WEB_UI_ORIGIN], for callers that want only the host (e.g. CORS allow-listing). */
+    const val WEB_UI_HOST = "appassets.androidplatform.net"
+
     /** Full URL of the chat web app's entry point. */
     const val WEB_UI_URL = "$WEB_UI_ORIGIN/assets/webui/index.html"
 }

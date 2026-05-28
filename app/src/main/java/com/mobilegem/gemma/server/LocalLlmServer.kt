@@ -1,6 +1,7 @@
 package com.mobilegem.gemma.server
 
 import com.mobilegem.gemma.logging.AppLog
+import com.mobilegem.gemma.ui.chat.ChatConfig
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -46,7 +47,7 @@ fun Application.installLlmRoutes(
 ) {
     install(ContentNegotiation) { json(jsonFormat) }
     install(CORS) {
-        allowHost("appassets.androidplatform.net", schemes = listOf("https"))
+        allowHost(ChatConfig.WEB_UI_HOST, schemes = listOf("https"))
         allowHeader("Content-Type")
         allowHeader("Authorization")
     }

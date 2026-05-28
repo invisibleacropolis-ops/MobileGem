@@ -30,9 +30,11 @@ object FactListParser {
         val end = raw.lastIndexOf(']')
         if (start < 0 || end <= start) return null
         val slice = raw.substring(start, end + 1)
+        // A successful JSON parse is authoritative — even if the result is empty.
+        // That distinguishes "model deliberately emitted []" (no retry needed) from
+        // "no JSON array in the text" (fall back to bullet scan).
         val parsed = runCatching { json.decodeFromString<List<String>>(slice) }.getOrNull()
             ?: return null
-        val cleaned = parsed.map { it.trim() }.filter { it.isNotBlank() }
-        return cleaned.ifEmpty { null }
+        return parsed.map { it.trim() }.filter { it.isNotBlank() }
     }
 }
