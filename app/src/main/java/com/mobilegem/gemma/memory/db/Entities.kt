@@ -61,23 +61,32 @@ data class Skill(
     val enabled: Boolean = true,
 )
 
-/** projectId == null means the memory is global. embedding length is model-defined. */
+/** projectId == null means the memory is global. Embedding stored as int8-quantized
+ *  bytes + a per-vector scale (see [com.mobilegem.gemma.memory.Quantization]). */
 @Entity(tableName = "memory_entries", indices = [Index("projectId")])
 data class MemoryEntry(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val projectId: Long?,
     val content: String,
-    val embedding: FloatArray,
+    val embeddingBytes: ByteArray,
+    val embeddingScale: Float,
     val sourceSessionId: Long?,
     val createdAt: Long,
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is MemoryEntry) return false
-        return id == other.id && content == other.content &&
-            embedding.contentEquals(other.embedding)
+        return id == other.id &&
+            content == other.content &&
+            embeddingBytes.contentEquals(other.embeddingBytes) &&
+            embeddingScale == other.embeddingScale
     }
 
-    override fun hashCode(): Int =
-        (id.hashCode() * 31 + content.hashCode()) * 31 + embedding.contentHashCode()
+    override fun hashCode(): Int {
+        var result = id.hashCode()
+        result = 31 * result + content.hashCode()
+        result = 31 * result + embeddingBytes.contentHashCode()
+        result = 31 * result + embeddingScale.hashCode()
+        return result
+    }
 }

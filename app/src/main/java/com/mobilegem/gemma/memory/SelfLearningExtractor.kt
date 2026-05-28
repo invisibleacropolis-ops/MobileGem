@@ -89,9 +89,11 @@ class SelfLearningExtractor(
                 embedding = embedding,
                 sourceSessionId = sessionId,
             )
+            val q = Quantization.quantize(embedding)
             MemoryEntry(
                 id = id, projectId = projectId, content = fact,
-                embedding = embedding, sourceSessionId = sessionId, createdAt = 0,
+                embeddingBytes = q.bytes, embeddingScale = q.scale,
+                sourceSessionId = sessionId, createdAt = 0,
             )
         }
 

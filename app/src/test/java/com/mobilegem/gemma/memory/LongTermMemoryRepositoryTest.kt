@@ -37,6 +37,10 @@ class LongTermMemoryRepositoryTest {
         val entries = repo.entriesForProjectScope(3)
         assertThat(entries).hasSize(1)
         assertThat(entries.single().content).isEqualTo("User prefers metric units")
-        assertThat(entries.single().embedding).isEqualTo(floatArrayOf(0.1f, 0.2f))
+        val roundtrip = com.mobilegem.gemma.memory.Quantization.dequantize(
+            entries.single().embeddingBytes, entries.single().embeddingScale,
+        )
+        assertThat(roundtrip[0]).isWithin(0.01f).of(0.1f)
+        assertThat(roundtrip[1]).isWithin(0.01f).of(0.2f)
     }
 }

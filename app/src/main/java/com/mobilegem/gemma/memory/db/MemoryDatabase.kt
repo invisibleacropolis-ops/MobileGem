@@ -8,7 +8,7 @@ import androidx.room.TypeConverters
 
 @Database(
     entities = [Project::class, Session::class, StoredMessage::class, Skill::class, MemoryEntry::class],
-    version = 1,
+    version = 2,
     exportSchema = false,
 )
 @TypeConverters(Converters::class)
@@ -20,6 +20,7 @@ abstract class MemoryDatabase : RoomDatabase() {
     companion object {
         fun create(context: Context): MemoryDatabase =
             Room.databaseBuilder(context, MemoryDatabase::class.java, "memory.db")
+                .fallbackToDestructiveMigration()
                 .build()
     }
 }

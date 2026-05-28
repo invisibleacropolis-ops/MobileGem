@@ -23,8 +23,9 @@ class MemoryRetriever(
         val queryVec = embedder.embed(query)
         val scored = candidates
             .mapNotNull { entry ->
-                if (entry.embedding.size != queryVec.size) null
-                else entry to VectorMath.cosineSimilarity(queryVec, entry.embedding)
+                val entryVec = entry.embeddingAsFloat()
+                if (entryVec.size != queryVec.size) null
+                else entry to VectorMath.cosineSimilarity(queryVec, entryVec)
             }
             .sortedByDescending { it.second }
             .take(topK)

@@ -48,15 +48,18 @@ class SkillMemoryDaoTest {
     fun memoryEntriesForProjectScopeIncludeGlobal() = runTest {
         db.memoryDao().insert(
             MemoryEntry(projectId = null, content = "global fact",
-                embedding = floatArrayOf(1f), sourceSessionId = null, createdAt = 1),
+                embeddingBytes = byteArrayOf(127), embeddingScale = 1f / 127f,
+                sourceSessionId = null, createdAt = 1),
         )
         db.memoryDao().insert(
             MemoryEntry(projectId = 1, content = "project fact",
-                embedding = floatArrayOf(2f), sourceSessionId = null, createdAt = 2),
+                embeddingBytes = byteArrayOf(64), embeddingScale = 2f / 127f,
+                sourceSessionId = null, createdAt = 2),
         )
         db.memoryDao().insert(
             MemoryEntry(projectId = 9, content = "unrelated",
-                embedding = floatArrayOf(3f), sourceSessionId = null, createdAt = 3),
+                embeddingBytes = byteArrayOf(32), embeddingScale = 3f / 127f,
+                sourceSessionId = null, createdAt = 3),
         )
 
         val entries = db.memoryDao().entriesForProjectScope(1)

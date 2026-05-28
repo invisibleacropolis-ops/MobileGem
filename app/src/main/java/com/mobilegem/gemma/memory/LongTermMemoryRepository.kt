@@ -1,6 +1,5 @@
 package com.mobilegem.gemma.memory
 
-import com.mobilegem.gemma.logging.AppLog
 import com.mobilegem.gemma.memory.db.MemoryDao
 import com.mobilegem.gemma.memory.db.MemoryEntry
 import kotlinx.coroutines.flow.Flow
@@ -16,28 +15,32 @@ class LongTermMemoryRepository(
     suspend fun entriesForProjectScope(projectId: Long): List<MemoryEntry> =
         memoryDao.entriesForProjectScope(projectId)
 
+    /**
+     * Stores [embedding] as int8-quantized bytes. Callers pass and receive
+     * `FloatArray` — the quantization is invisible above this layer.
+     */
     suspend fun store(
-        projectId: Long?, content: String, embedding: FloatArray, sourceSessionId: Long?,
+        projectId: Long?,
+        content: String,
+        embedding: FloatArray,
+        sourceSessionId: Long?,
     ): Long {
-        AppLog.event(
-            "memory", "memory.ltm.store",
-            "projectId" to projectId,
-            "chars" to content.length,
-            "dim" to embedding.size,
-        )
+        val q = Quantization.quantize(embedding)
         return memoryDao.insert(
             MemoryEntry(
                 projectId = projectId,
                 content = content,
-                embedding = embedding,
+                embeddingBytes = q.bytes,
+                embeddingScale = q.scale,
                 sourceSessionId = sourceSessionId,
                 createdAt = clock(),
             ),
         )
     }
 
-    suspend fun delete(entryId: Long) {
-        AppLog.event("memory", "memory.ltm.delete", "entryId" to entryId)
-        memoryDao.delete(entryId)
-    }
+    suspend fun delete(entryId: Long) = memoryDao.delete(entryId)
 }
+
+/** Dequantizes the entry's stored embedding back to a `FloatArray`. */
+fun MemoryEntry.embeddingAsFloat(): FloatArray =
+    Quantization.dequantize(embeddingBytes, embeddingScale)

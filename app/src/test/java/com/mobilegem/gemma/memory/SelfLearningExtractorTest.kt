@@ -57,8 +57,12 @@ class SelfLearningExtractorTest {
         val persisted = ltm.entriesForProjectScope(2)
         assertThat(persisted.map { it.content })
             .containsExactly("User prefers Kotlin", "User lives in Berlin")
-        assertThat(persisted.first { it.content == "User prefers Kotlin" }.embedding)
-            .isEqualTo(floatArrayOf(1f, 0f))
+        val kotlinEntry = persisted.first { it.content == "User prefers Kotlin" }
+        val kotlinRoundtrip = Quantization.dequantize(
+            kotlinEntry.embeddingBytes, kotlinEntry.embeddingScale,
+        )
+        assertThat(kotlinRoundtrip[0]).isWithin(0.01f).of(1f)
+        assertThat(kotlinRoundtrip[1]).isWithin(0.01f).of(0f)
         assertThat(persisted.all { it.sourceSessionId == 5L }).isTrue()
     }
 

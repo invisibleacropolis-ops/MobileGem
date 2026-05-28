@@ -49,7 +49,8 @@ class MemoryContextAugmenterTest {
         db.memoryDao().insert(
             com.mobilegem.gemma.memory.db.MemoryEntry(
                 projectId = 1, content = "User is a Kotlin developer.",
-                embedding = floatArrayOf(1f, 0f), sourceSessionId = null, createdAt = 1,
+                embeddingBytes = byteArrayOf(127, 0), embeddingScale = 1f / 127f,
+                sourceSessionId = null, createdAt = 1,
             ),
         )
         val embedder = FakeEmbedder(mapOf("tell me about kotlin" to floatArrayOf(1f, 0f)))
