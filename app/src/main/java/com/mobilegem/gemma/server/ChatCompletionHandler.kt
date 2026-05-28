@@ -1,7 +1,9 @@
 package com.mobilegem.gemma.server
 
+import com.mobilegem.gemma.inference.SessionedTextGenerator
 import com.mobilegem.gemma.inference.TextGenerator
 import com.mobilegem.gemma.logging.AppLog
+import com.mobilegem.gemma.memory.ActiveSession
 import com.mobilegem.gemma.memory.ActiveSessionHolder
 import com.mobilegem.gemma.memory.ConversationPersister
 import kotlinx.coroutines.flow.Flow
@@ -28,18 +30,14 @@ class ChatCompletionHandler(
             "chat", "chat.handle.begin",
             "messageCount" to request.messages.size, "stream" to true,
         )
-        try {
-            val id = "chatcmpl-${System.nanoTime()}"
-            val created = System.currentTimeMillis() / 1000
-            val temp = request.temperature ?: 0.8f
-            val messages = MessageBudget.fitWithinBudget(
-                augmentedMessages(request.messages), maxInputTokens,
-            )
-            val prompt = GemmaPromptBuilder.build(messages)
+        val id = "chatcmpl-${System.nanoTime()}"
+        val created = System.currentTimeMillis() / 1000
+        val temp = request.temperature ?: 0.8f
 
-            emit(sseChunk(id, created, request.model, Delta(role = "assistant"), null))
-            val answer = StringBuilder()
-            generator.generate(prompt, temp).collect { token ->
+        emit(sseChunk(id, created, request.model, Delta(role = "assistant"), null))
+        val answer = StringBuilder()
+        try {
+            runGeneration(request.messages, temp).collect { token ->
                 answer.append(token)
                 emit(sseChunk(id, created, request.model, Delta(content = token), null))
             }
@@ -58,50 +56,79 @@ class ChatCompletionHandler(
             "chat", "chat.handle.begin",
             "messageCount" to request.messages.size, "stream" to false,
         )
-        return try {
-            val temp = request.temperature ?: 0.8f
-            val messages = MessageBudget.fitWithinBudget(
-                augmentedMessages(request.messages), maxInputTokens,
-            )
-            val prompt = GemmaPromptBuilder.build(messages)
-            val answer = StringBuilder()
-            generator.generate(prompt, temp).collect { answer.append(it) }
+        val temp = request.temperature ?: 0.8f
+        val answer = StringBuilder()
+        try {
+            runGeneration(request.messages, temp).collect { answer.append(it) }
             persist(request.messages, answer.toString())
             AppLog.event("chat", "chat.handle.end", "assistantChars" to answer.length)
-            ChatCompletionResponse(
-                id = "chatcmpl-${System.nanoTime()}",
-                created = System.currentTimeMillis() / 1000,
-                model = request.model,
-                choices = listOf(MessageChoice(message = ChatMessage("assistant", answer.toString()))),
-            )
         } catch (t: Throwable) {
             AppLog.error("chat", "chat.handle.failed", t)
             throw t
         }
+        return ChatCompletionResponse(
+            id = "chatcmpl-${System.nanoTime()}",
+            created = System.currentTimeMillis() / 1000,
+            model = request.model,
+            choices = listOf(MessageChoice(message = ChatMessage("assistant", answer.toString()))),
+        )
     }
 
-    /** Prepends a skills/memory system message when a session is active. */
-    private suspend fun augmentedMessages(original: List<ChatMessage>): List<ChatMessage> {
+    /**
+     * Single dispatch site: when an active session exists AND the generator
+     * implements [SessionedTextGenerator], hand off [systemContext] and
+     * [messages] separately so the implementation can reuse a per-session
+     * KV cache. Otherwise, collapse the system context into the messages
+     * list and run the stateless prompt-building path.
+     */
+    private fun runGeneration(
+        original: List<ChatMessage>, temperature: Float,
+    ): Flow<String> = flow {
         val session = activeSession?.current()
-        val aug = augmenter
-        if (session == null || aug == null) {
+        val systemContext = buildSystemContext(session, original)
+        val hasSession = session != null
+
+        if (session != null && generator is SessionedTextGenerator) {
+            val bounded = MessageBudget.fitWithinBudget(original, maxInputTokens)
             AppLog.event(
                 "chat", "chat.augment",
-                "hasSession" to (session != null),
-                "hasAugmenter" to (aug != null),
-                "injectedChars" to 0,
+                "hasSession" to hasSession,
+                "hasAugmenter" to (augmenter != null),
+                "injectedChars" to (systemContext?.length ?: 0),
+                "boundedMessages" to bounded.size,
+                "sessioned" to true,
             )
-            return original
+            generator.generateSession(
+                sessionId = session.sessionId.toString(),
+                systemContext = systemContext,
+                messages = bounded,
+                temperature = temperature,
+            ).collect { emit(it) }
+        } else {
+            val augmented = if (systemContext == null) original
+            else listOf(ChatMessage("system", systemContext)) + original
+            val bounded = MessageBudget.fitWithinBudget(augmented, maxInputTokens)
+            AppLog.event(
+                "chat", "chat.augment",
+                "hasSession" to hasSession,
+                "hasAugmenter" to (augmenter != null),
+                "injectedChars" to (systemContext?.length ?: 0),
+                "boundedMessages" to bounded.size,
+                "sessioned" to false,
+            )
+            val prompt = GemmaPromptBuilder.build(bounded)
+            generator.generate(prompt, temperature).collect { emit(it) }
         }
+    }
+
+    /** Resolves the per-request system context, or null if none should be injected. */
+    private suspend fun buildSystemContext(
+        session: ActiveSession?, original: List<ChatMessage>,
+    ): String? {
+        if (session == null) return null
+        val aug = augmenter ?: return null
         val latestUser = original.lastOrNull { it.role == "user" }?.content ?: ""
-        val context = aug.systemContextFor(session.projectId, latestUser)
-        AppLog.event(
-            "chat", "chat.augment",
-            "hasSession" to true, "hasAugmenter" to true,
-            "injectedChars" to (context?.length ?: 0),
-        )
-        if (context == null) return original
-        return listOf(ChatMessage("system", context)) + original
+        return aug.systemContextFor(session.projectId, latestUser)
     }
 
     /** Replaces the active session's stored transcript with the latest exchange. */
