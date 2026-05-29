@@ -54,6 +54,11 @@ fun Application.installLlmRoutes(
     routing {
         get("/v1/models") {
             if (!checkAuth(expectedToken)) {
+                AppLog.warn(
+                    "server", "auth.rejected",
+                    "route" to "/v1/models",
+                    "hasHeader" to (call.request.headers[HttpHeaders.Authorization] != null),
+                )
                 call.respond(HttpStatusCode.Unauthorized)
                 return@get
             }
@@ -62,6 +67,11 @@ fun Application.installLlmRoutes(
         }
         post("/v1/chat/completions") {
             if (!checkAuth(expectedToken)) {
+                AppLog.warn(
+                    "server", "auth.rejected",
+                    "route" to "/v1/chat/completions",
+                    "hasHeader" to (call.request.headers[HttpHeaders.Authorization] != null),
+                )
                 call.respond(HttpStatusCode.Unauthorized)
                 return@post
             }
