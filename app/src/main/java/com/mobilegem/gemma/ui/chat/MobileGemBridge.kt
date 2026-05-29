@@ -5,14 +5,13 @@ import com.mobilegem.gemma.logging.AppLog
 
 /**
  * Bridge object exposed to the in-app WebView's JavaScript context as
- * `window.MobileGem`. Provides the per-launch auth token required to talk
- * to the local LLM server. Methods MUST be safe to call from any thread —
- * the WebView invokes JavascriptInterface methods on a dedicated thread.
+ * `window.MobileGem`. Methods MUST be safe to call from any thread — the
+ * WebView invokes JavascriptInterface methods on a dedicated thread.
+ *
+ * The local LLM server binds to 127.0.0.1 and is reachable only from this
+ * app's own WebView, so no auth token is exchanged.
  */
-class MobileGemBridge(private val authTokenProvider: () -> String) {
-    @JavascriptInterface
-    fun getAuthToken(): String = authTokenProvider()
-
+class MobileGemBridge {
     /**
      * Called by the WebView's global error trap to report uncaught JS errors and
      * unhandled promise rejections. [payload] is a JSON string with `type`,

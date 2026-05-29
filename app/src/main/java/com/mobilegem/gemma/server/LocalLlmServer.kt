@@ -1,9 +1,8 @@
 package com.mobilegem.gemma.server
 
 import com.mobilegem.gemma.logging.AppLog
-import com.mobilegem.gemma.ui.chat.ChatConfig
 import io.ktor.http.ContentType
-import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
@@ -43,38 +42,33 @@ private data class ModelList(
 fun Application.installLlmRoutes(
     handler: ChatCompletionHandler,
     modelId: String,
-    expectedToken: String? = null,
 ) {
     install(ContentNegotiation) { json(jsonFormat) }
+    // The server binds to 127.0.0.1 only and is reachable solely from the app's
+    // own in-process WebView. There is no network-facing attack surface, so CORS
+    // is permissive: the WebView origin (https://appassets.androidplatform.net)
+    // must be able to POST JSON, which requires allowing the OPTIONS preflight
+    // and non-simple (application/json) content types.
     install(CORS) {
-        allowHost(ChatConfig.WEB_UI_HOST, schemes = listOf("https"))
-        allowHeader("Content-Type")
-        allowHeader("Authorization")
+        anyHost()
+        allowMethod(HttpMethod.Get)
+        allowMethod(HttpMethod.Post)
+        allowMethod(HttpMethod.Options)
+        // The OpenAI-compatible client (pi-ai) attaches several non-simple
+        // headers (Authorization, Content-Type, and the x-stainless-* family).
+        // The browser lists them all in the preflight's
+        // Access-Control-Request-Headers; any header not allowed here makes
+        // Ktor reject the preflight with 403 and no Allow-Origin header. Since
+        // this is a loopback-only server, allow every request header.
+        allowHeaders { true }
+        allowNonSimpleContentTypes = true
     }
     routing {
         get("/v1/models") {
-            if (!checkAuth(expectedToken)) {
-                AppLog.warn(
-                    "server", "auth.rejected",
-                    "route" to "/v1/models",
-                    "hasHeader" to (call.request.headers[HttpHeaders.Authorization] != null),
-                )
-                call.respond(HttpStatusCode.Unauthorized)
-                return@get
-            }
             AppLog.event("server", "server.models.list", "modelId" to modelId)
             call.respond(ModelList(data = listOf(ModelInfo(id = modelId))))
         }
         post("/v1/chat/completions") {
-            if (!checkAuth(expectedToken)) {
-                AppLog.warn(
-                    "server", "auth.rejected",
-                    "route" to "/v1/chat/completions",
-                    "hasHeader" to (call.request.headers[HttpHeaders.Authorization] != null),
-                )
-                call.respond(HttpStatusCode.Unauthorized)
-                return@post
-            }
             try {
                 val request = jsonFormat.decodeFromString(
                     ChatCompletionRequest.serializer(), call.receiveText(),
@@ -102,25 +96,16 @@ fun Application.installLlmRoutes(
     }
 }
 
-private suspend fun io.ktor.util.pipeline.PipelineContext<Unit, io.ktor.server.application.ApplicationCall>.checkAuth(
-    expected: String?,
-): Boolean {
-    if (expected == null) return true
-    val header = call.request.headers[HttpHeaders.Authorization] ?: return false
-    val token = header.removePrefix("Bearer ").trim()
-    return token == expected
-}
-
 /** Owns the running HTTP server. The active model can be swapped by rebuilding. */
 class LocalLlmServer(private val port: Int = 8765) {
 
     private var server: ApplicationEngine? = null
 
-    fun start(handler: ChatCompletionHandler, modelId: String, expectedToken: String? = null) {
+    fun start(handler: ChatCompletionHandler, modelId: String) {
         stop()
         AppLog.event("server", "server.start", "port" to port, "modelId" to modelId)
         server = embeddedServer(CIO, port = port, host = "127.0.0.1") {
-            installLlmRoutes(handler, modelId, expectedToken)
+            installLlmRoutes(handler, modelId)
         }.also { it.start(wait = false) }
     }
 

@@ -15,7 +15,6 @@ import com.mobilegem.gemma.memory.SelfLearningExtractor
 import com.mobilegem.gemma.memory.SkillRepository
 import com.mobilegem.gemma.memory.db.MemoryDatabase
 import com.mobilegem.gemma.model.ModelFileManager
-import com.mobilegem.gemma.server.AuthToken
 import com.mobilegem.gemma.server.MemoryContextAugmenter
 import com.mobilegem.gemma.settings.AppSettings
 import com.mobilegem.gemma.settings.SettingsRepository
@@ -72,8 +71,6 @@ class AppContainer(context: Context) {
 
     private val engineCacheDir = File(context.cacheDir, "litertlm")
 
-    val authToken: AuthToken = AuthToken()
-
     val inferenceController = InferenceController(
         activeSession = activeSessionHolder,
         augmenter = MemoryContextAugmenter(skillRepository, retriever),
@@ -81,7 +78,6 @@ class AppContainer(context: Context) {
         generatorFactory = { modelPath, backend ->
             LiteRtLmTextGenerator.create(modelPath, backend, engineCacheDir)
         },
-        authToken = authToken.value,
     )
 
     /**

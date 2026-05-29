@@ -59,7 +59,6 @@ private val JS_ERROR_TRAP = """
 @Composable
 fun ChatScreen(
     activeSessionHolder: ActiveSessionHolder,
-    authToken: String,
     modifier: Modifier = Modifier,
 ) {
     val active by activeSessionHolder.active.collectAsState()
@@ -77,7 +76,7 @@ fun ChatScreen(
                         .build()
 
                     WebView(context).apply {
-                        addJavascriptInterface(MobileGemBridge { authToken }, "MobileGem")
+                        addJavascriptInterface(MobileGemBridge(), "MobileGem")
                         settings.javaScriptEnabled = true
                         settings.domStorageEnabled = true
                         settings.mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
