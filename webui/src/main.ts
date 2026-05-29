@@ -165,25 +165,45 @@ async function initApp(): Promise<void> {
 
   app.replaceChildren(chatPanel);
 
-  // INVARIANT (b): every completed/streamed message is shown in the transcript.
-  //
-  // pi-agent-core mutates `agent.state.messages` IN PLACE (Agent.messages getter
-  // always returns the same internal array; new messages are push()ed onto it).
-  // pi-web-ui's stable <message-list> is bound with `.messages=${state.messages}`
-  // and relies on Lit's `!==` property dirty-check to re-render. Because the array
-  // reference never changes, that binding never fires after the initial (empty)
-  // render, so finalized messages never appear — the symptom is a chat that shows
-  // a cursor and then nothing. AgentInterface.requestUpdate() re-runs its own
-  // template but cannot wake the child, since the bound value is reference-equal.
-  //
-  // Force the stable list to re-render on every agent event. requestUpdate() makes
-  // MessageList re-read the (in-place mutated) array, which already holds the
-  // latest messages, so the transcript stays correct without touching node_modules.
-  agent.subscribe(() => {
+  // Force pi-web-ui to re-render on agent activity. Two distinct library quirks
+  // make this necessary; both are worked around here without patching node_modules.
+  const forceRerender = () => {
+    // INVARIANT (b): every completed/streamed message is shown in the transcript.
+    //
+    // pi-agent-core mutates `agent.state.messages` IN PLACE (Agent.messages getter
+    // always returns the same internal array; new messages are push()ed onto it).
+    // pi-web-ui's stable <message-list> is bound with `.messages=${state.messages}`
+    // and relies on Lit's `!==` property dirty-check to re-render. Because the array
+    // reference never changes, that binding never fires after the initial (empty)
+    // render, so finalized messages never appear. requestUpdate() makes MessageList
+    // re-read the (in-place mutated) array, which already holds the latest messages.
     const messageList = chatPanel.querySelector("message-list") as
       | (HTMLElement & { requestUpdate?: () => void })
       | null;
     messageList?.requestUpdate?.();
+    // Also wake AgentInterface so its <message-editor> picks up the current
+    // isStreaming value (see the agent_end handling below).
+    (
+      chatPanel.agentInterface as unknown as { requestUpdate?: () => void } | undefined
+    )?.requestUpdate?.();
+  };
+
+  agent.subscribe((event) => {
+    forceRerender();
+
+    // INVARIANT (c): the input is re-enabled after every turn (no one-shot freeze).
+    //
+    // pi-agent-core sets state.isStreaming=true before the run, emits `agent_end`
+    // while it is STILL true, and only clears it afterwards in finishRun() — with
+    // NO further event emitted. AgentInterface binds <message-editor>.isStreaming
+    // from state.isStreaming and only re-renders on agent events, so its last
+    // render (on agent_end) leaves the editor stuck isStreaming=true forever: the
+    // Enter key and Send button stay disabled and the chat appears frozen after
+    // one turn. Re-render once more on a macrotask, by which point finishRun() has
+    // run and isStreaming is false, so the editor re-enables.
+    if ((event as { type?: string } | undefined)?.type === "agent_end") {
+      setTimeout(forceRerender, 0);
+    }
   });
 }
 
