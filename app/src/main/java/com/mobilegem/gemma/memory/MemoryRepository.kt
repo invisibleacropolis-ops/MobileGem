@@ -19,6 +19,7 @@ class MemoryRepository(
 
     suspend fun projectById(id: Long): Project? = coreDao.projectById(id)
     suspend fun sessionById(id: Long): Session? = coreDao.sessionById(id)
+    suspend fun projectIdByName(name: String): Long? = coreDao.projectIdByName(name)
 
     suspend fun createProject(name: String, description: String): Long {
         val now = clock()

@@ -3,6 +3,7 @@ package com.mobilegem.gemma.inference
 import com.mobilegem.gemma.logging.AppLog
 import com.mobilegem.gemma.memory.ActiveSessionHolder
 import com.mobilegem.gemma.memory.ConversationPersister
+import com.mobilegem.gemma.memory.SessionRouter
 import com.mobilegem.gemma.server.ChatCompletionHandler
 import com.mobilegem.gemma.server.ContextAugmenter
 import com.mobilegem.gemma.server.LocalLlmServer
@@ -25,6 +26,7 @@ class InferenceController(
     private val activeSession: ActiveSessionHolder? = null,
     private val augmenter: ContextAugmenter? = null,
     private val persister: ConversationPersister? = null,
+    private val sessionRouter: SessionRouter? = null,
 ) {
     private val _state = MutableStateFlow(InferenceState())
     val state: StateFlow<InferenceState> = _state.asStateFlow()
@@ -50,6 +52,7 @@ class InferenceController(
                 augmenter = augmenter,
                 persister = persister,
                 activeSession = activeSession,
+                sessionRouter = sessionRouter,
             )
             server.start(handler, modelId = name)
             _state.value = InferenceState(loadedModelName = name, serverRunning = true)

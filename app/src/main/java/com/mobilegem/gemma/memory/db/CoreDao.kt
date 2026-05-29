@@ -24,6 +24,9 @@ interface CoreDao {
     @Query("SELECT * FROM projects WHERE id = :projectId")
     suspend fun projectById(projectId: Long): Project?
 
+    @Query("SELECT id FROM projects WHERE name = :name ORDER BY id ASC LIMIT 1")
+    suspend fun projectIdByName(name: String): Long?
+
     @Insert
     suspend fun insertSession(session: Session): Long
 

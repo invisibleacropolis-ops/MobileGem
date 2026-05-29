@@ -6,6 +6,7 @@ import com.mobilegem.gemma.logging.AppLog
 import com.mobilegem.gemma.memory.ActiveSession
 import com.mobilegem.gemma.memory.ActiveSessionHolder
 import com.mobilegem.gemma.memory.ConversationPersister
+import com.mobilegem.gemma.memory.SessionRouter
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.json.Json
@@ -15,6 +16,7 @@ class ChatCompletionHandler(
     private val augmenter: ContextAugmenter? = null,
     private val persister: ConversationPersister? = null,
     private val activeSession: ActiveSessionHolder? = null,
+    private val sessionRouter: SessionRouter? = null,
     /** Total context window in tokens (model-dependent). Gemma 4 defaults to 8192. */
     private val contextWindow: Int = 8192,
     /** Reserved budget for the model's own output. */
@@ -33,6 +35,10 @@ class ChatCompletionHandler(
         val id = "chatcmpl-${System.nanoTime()}"
         val created = System.currentTimeMillis() / 1000
         val temp = request.temperature ?: 0.8f
+
+        // Ensure a Memory-layer session exists before generation so the exchange
+        // is persisted (persist() is gated on an active session).
+        sessionRouter?.route(request.messages)
 
         emit(sseChunk(id, created, request.model, Delta(role = "assistant"), null))
         val answer = StringBuilder()
@@ -57,6 +63,7 @@ class ChatCompletionHandler(
             "messageCount" to request.messages.size, "stream" to false,
         )
         val temp = request.temperature ?: 0.8f
+        sessionRouter?.route(request.messages)
         val answer = StringBuilder()
         try {
             runGeneration(request.messages, temp).collect { answer.append(it) }

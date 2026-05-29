@@ -12,6 +12,7 @@ import com.mobilegem.gemma.memory.LongTermMemoryRepository
 import com.mobilegem.gemma.memory.MemoryRepository
 import com.mobilegem.gemma.memory.MemoryRetriever
 import com.mobilegem.gemma.memory.SelfLearningExtractor
+import com.mobilegem.gemma.memory.SessionRouter
 import com.mobilegem.gemma.memory.SkillRepository
 import com.mobilegem.gemma.memory.db.MemoryDatabase
 import com.mobilegem.gemma.model.ModelFileManager
@@ -62,6 +63,13 @@ class AppContainer(context: Context) {
     val activeSessionHolder = ActiveSessionHolder()
 
     /**
+     * Auto-persists every chat conversation as a Memory-layer Session, titled by
+     * its first line. The chat WebView never sets an active session itself, so
+     * without this nothing chatted through the WebView would be saved.
+     */
+    private val sessionRouter = SessionRouter(memoryRepository, activeSessionHolder)
+
+    /**
      * On-device text embedder. Wrapped in [LazyEmbedder] so the MediaPipe model
      * file is loaded on first use (inside a coroutine), not at app startup.
      */
@@ -75,6 +83,7 @@ class AppContainer(context: Context) {
         activeSession = activeSessionHolder,
         augmenter = MemoryContextAugmenter(skillRepository, retriever),
         persister = memoryRepository,
+        sessionRouter = sessionRouter,
         generatorFactory = { modelPath, backend ->
             LiteRtLmTextGenerator.create(modelPath, backend, engineCacheDir)
         },
